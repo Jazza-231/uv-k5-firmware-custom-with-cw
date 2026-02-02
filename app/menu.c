@@ -47,6 +47,27 @@
     #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
+static char MENU_NextDtmfChar(char current, int8_t direction)
+{
+    static const char dtmf_chars[] = "0123456789ABCD*# ";
+    const size_t count = sizeof(dtmf_chars) - 1;
+    size_t index = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        if (dtmf_chars[i] == current) {
+            index = i;
+            break;
+        }
+    }
+
+    if (direction > 0)
+        index = (index + 1) % count;
+    else if (direction < 0)
+        index = (index + count - 1) % count;
+
+    return dtmf_chars[index];
+}
+
 uint8_t gUnlockAllTxConfCnt;
 
 #ifdef ENABLE_F_CAL_MENU
@@ -835,6 +856,34 @@ void MENU_AcceptSetting(void)
             }
             break;
 
+        case MENU_CWON:
+        case MENU_CWOFF:
+            {
+            const int code_len = (int)DTMF_CW_CODE_LEN;
+            char *target = (UI_MENU_GetCurrentMenuId() == MENU_CWON)
+                ? gEeprom.DTMF_CW_ON_CODE
+                : gEeprom.DTMF_CW_OFF_CODE;
+
+            for (int i = code_len - 1; i >= 0; i--) {
+                if (edit[i] != ' ' && edit[i] != '_' && edit[i] != 0x00 && edit[i] != 0xff)
+                    break;
+                edit[i] = ' ';
+            }
+            for (int i = 0; i < code_len; i++) {
+                if (edit[i] == '_')
+                    edit[i] = ' ';
+                target[i] = edit[i];
+            }
+            target[code_len] = 0;
+            for (int i = code_len - 1; i >= 0 && target[i] == ' '; i--)
+                target[i] = 0;
+
+            if (target[0] == 0) {
+                strcpy(target, (UI_MENU_GetCurrentMenuId() == MENU_CWON) ? "123" : "456");
+            }
+            }
+            break;
+
         case MENU_CW_WPM:
             morse_wpm = (uint8_t)gSubMenuSelection;
             morse_wpm_effective = morse_wpm;
@@ -1014,9 +1063,11 @@ void MENU_AcceptSetting(void)
             gSetting_set_ctr = gSubMenuSelection;
             break;
 #endif
+#ifdef ENABLE_FEAT_F4HWN_INV
         case MENU_SET_INV:
             gSetting_set_inv = gSubMenuSelection;
             break;
+#endif
         case MENU_SET_LCK:
             gSetting_set_lck = gSubMenuSelection;
             break;
@@ -1480,9 +1531,11 @@ void MENU_ShowCurrentSetting(void)
             gSubMenuSelection = gSetting_set_ctr;
             break;
 #endif
+#ifdef ENABLE_FEAT_F4HWN_INV
         case MENU_SET_INV:
             gSubMenuSelection = gSetting_set_inv;
             break;
+#endif
         case MENU_SET_LCK:
             gSubMenuSelection = gSetting_set_lck;
             break;
@@ -1533,10 +1586,12 @@ static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
     gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
-    if ((menu_id == MENU_MEM_NAME || menu_id == MENU_CWID1 || menu_id == MENU_CWID2) && edit_index >= 0)
+    if ((menu_id == MENU_MEM_NAME || menu_id == MENU_CWID1 || menu_id == MENU_CWID2 || menu_id == MENU_CWON || menu_id == MENU_CWOFF) && edit_index >= 0)
     {   // currently editing the channel name
 
-        const uint8_t max_len = (menu_id == MENU_MEM_NAME) ? 10 : MORSE_CWID_PART_LEN;
+        const uint8_t max_len = (menu_id == MENU_MEM_NAME) ? 10
+            : (menu_id == MENU_CWON || menu_id == MENU_CWOFF) ? DTMF_CW_CODE_LEN
+            : MORSE_CWID_PART_LEN;
 
         if (edit_index < max_len)
         {
@@ -1869,6 +1924,39 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
         }
     }
 
+    if (menu_id == MENU_CWON || menu_id == MENU_CWOFF)
+    {
+        const int code_len = (int)DTMF_CW_CODE_LEN;
+        const char *source = (menu_id == MENU_CWON) ? gEeprom.DTMF_CW_ON_CODE : gEeprom.DTMF_CW_OFF_CODE;
+
+        if (edit_index < 0)
+        {   // enter CW remote code edit mode
+            strncpy(edit, source, code_len);
+            edit[code_len] = 0;
+
+            edit_index = strlen(edit);
+            while (edit_index < code_len)
+                edit[edit_index++] = '_';
+            edit[edit_index] = 0;
+            edit_index = 0;
+
+            memcpy(edit_original, edit, sizeof(edit_original));
+            return;
+        }
+        else
+        if (edit_index >= 0 && edit_index < code_len)
+        {   // editing CW remote code
+            if (++edit_index < code_len)
+                return;
+
+            gFlagAcceptSetting  = false;
+            gAskForConfirmation = 0;
+            if (memcmp(edit_original, edit, sizeof(edit_original)) == 0) {
+                gIsInSubMenu = false;
+            }
+        }
+    }
+
     // exiting the sub menu
 
     if (gIsInSubMenu)
@@ -1936,14 +2024,16 @@ static void MENU_Key_STAR(const bool bKeyPressed, const bool bKeyHeld)
 
     gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
-    if ((UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME || UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2) && edit_index >= 0)
+    if ((UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME || UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2 || UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) && edit_index >= 0)
     {   // currently editing the channel name
 
-        const uint8_t max_len = (UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME) ? 10 : MORSE_CWID_PART_LEN;
+        const uint8_t max_len = (UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME) ? 10
+            : (UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) ? DTMF_CW_CODE_LEN
+            : MORSE_CWID_PART_LEN;
 
         if (edit_index < max_len)
         {
-            edit[edit_index] = '-';
+            edit[edit_index] = (UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) ? '*' : '-';
 
             if (++edit_index >= max_len)
             {   // exit edit
@@ -1985,6 +2075,16 @@ static void MENU_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
     uint8_t VFO;
     uint8_t Channel;
     bool    bCheckScanList;
+
+    if ((UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) && gIsInSubMenu && edit_index >= 0)
+    {
+        if (bKeyPressed && edit_index < (int)DTMF_CW_CODE_LEN && Direction != 0)
+        {
+            edit[edit_index] = MENU_NextDtmfChar(edit[edit_index], Direction);
+            gRequestDisplayScreen = DISPLAY_MENU;
+        }
+        return;
+    }
 
     if ((UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME || UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2) && gIsInSubMenu && edit_index >= 0)
     {   // change the character
@@ -2130,17 +2230,19 @@ void MENU_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             MENU_Key_STAR(bKeyPressed, bKeyHeld);
             break;
         case KEY_F:
-            if ((UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME || UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2) && edit_index >= 0)
+            if ((UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME || UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2 || UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) && edit_index >= 0)
             {   // currently editing the channel name
                 if (!bKeyHeld && bKeyPressed)
                 {
                     gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
                     const uint8_t max_len = (UI_MENU_GetCurrentMenuId() == MENU_CWID1 || UI_MENU_GetCurrentMenuId() == MENU_CWID2)
                         ? MORSE_CWID_PART_LEN
-                        : 10;
+                        : (UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF)
+                            ? DTMF_CW_CODE_LEN
+                            : 10;
                     if (edit_index < max_len)
                     {
-                        edit[edit_index] = ' ';
+                        edit[edit_index] = (UI_MENU_GetCurrentMenuId() == MENU_CWON || UI_MENU_GetCurrentMenuId() == MENU_CWOFF) ? '#' : ' ';
                         if (++edit_index >= max_len)
                         {   // exit edit
                             gFlagAcceptSetting  = false;

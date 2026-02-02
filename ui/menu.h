@@ -86,6 +86,8 @@ enum
 #endif
     MENU_UPCODE,
     MENU_DWCODE,
+    MENU_CWON,
+    MENU_CWOFF,
     MENU_PTT_ID,
     MENU_D_ST,
 #ifdef ENABLE_DTMF_CALLING

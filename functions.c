@@ -39,6 +39,7 @@
 #include "settings.h"
 #include "ui/status.h"
 #include "ui/ui.h"
+#include "ui/morse.h"
 
 FUNCTION_Type_t gCurrentFunction;
 
@@ -252,7 +253,10 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
     if (bWasPowerSave && Function != FUNCTION_POWER_SAVE) {
         BK4819_Conditional_RX_TurnOn_and_GPIO6_Enable();
         gRxIdleMode = false;
-        UI_DisplayStatus();
+        if (gScreenToDisplay == DISPLAY_MORSE)
+            UI_DisplayMORSEStatus();
+        else
+            UI_DisplayStatus();
     }
 
     /*

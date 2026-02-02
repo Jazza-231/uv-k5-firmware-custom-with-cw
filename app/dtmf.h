@@ -86,6 +86,7 @@ void DTMF_clear_input_box(void);
 void DTMF_Append(const char code);
 void DTMF_Reply(void);
 void DTMF_SendEndOfTransmission(void);
+bool DTMF_CodeEquals(const char *a, const char *b, const unsigned int max_len);
 
 #ifdef ENABLE_DTMF_CALLING
 

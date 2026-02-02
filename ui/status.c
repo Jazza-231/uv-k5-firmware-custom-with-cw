@@ -58,6 +58,9 @@ void UI_DisplayStatus()
 {
     char str[8] = "";
 
+    if (gScreenToDisplay == DISPLAY_MORSE)
+        return;
+
     gUpdateStatus = false;
     memset(gStatusLine, 0, sizeof(gStatusLine));
 

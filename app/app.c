@@ -192,6 +192,11 @@ static void HandleIncoming(void)
 #ifdef ENABLE_DTMF_CALLING
         if (gDTMF_RX_index > 0)
             DTMF_clear_RX();
+        if (gDTMF_RX_live[0] != 0) {
+            memset(gDTMF_RX_live, 0, sizeof(gDTMF_RX_live));
+            gDTMF_RX_live_timeout = 0;
+            gUpdateDisplay = true;
+        }
 #endif
         if (gCurrentFunction != FUNCTION_FOREGROUND) {
             FUNCTION_Select(FUNCTION_FOREGROUND);
@@ -229,7 +234,8 @@ static void HandleIncoming(void)
         DTMF_HandleRequest();
         if (gDTMF_CallState == DTMF_CALL_STATE_NONE) {
             if (gRxReceptionMode != RX_MODE_DETECTED) {
-                return;
+                if (gScreenToDisplay != DISPLAY_MORSE)
+                    return;
             }
             gDualWatchCountdown_10ms = dual_watch_count_after_1_10ms;
             gScheduleDualWatch       = false;
@@ -241,7 +247,8 @@ static void HandleIncoming(void)
             gUpdateStatus    = true;
 
             gUpdateDisplay = true;
-            return;
+            if (gScreenToDisplay != DISPLAY_MORSE)
+                return;
         }
     }
 #endif
@@ -392,6 +399,14 @@ Skip:
                     gNOAACountdown_10ms = 300;         // 3 sec
             #endif
 
+#ifdef ENABLE_DTMF_CALLING
+            if (gDTMF_RX_live[0] != 0) {
+                memset(gDTMF_RX_live, 0, sizeof(gDTMF_RX_live));
+                gDTMF_RX_live_timeout = 0;
+                gUpdateDisplay = true;
+            }
+#endif
+
             gUpdateDisplay = true;
 
             if (gScanStateDir != SCAN_OFF)
@@ -475,6 +490,13 @@ Skip:
                 gEndOfRxDetectedMaybe = true;
                 gEnableSpeaker        = false;
             }
+#ifdef ENABLE_DTMF_CALLING
+            if (gDTMF_RX_live[0] != 0) {
+                memset(gDTMF_RX_live, 0, sizeof(gDTMF_RX_live));
+                gDTMF_RX_live_timeout = 0;
+                gUpdateDisplay = true;
+            }
+#endif
             break;
     }
 }
@@ -703,6 +725,10 @@ static void CheckRadioInterrupts(void)
             const char c = DTMF_GetCharacter(BK4819_GetDTMF_5TONE_Code()); // save the RX'ed DTMF character
             if (c != 0xff) {
                 if (gCurrentFunction != FUNCTION_TRANSMIT) {
+                    if (gScreenToDisplay == DISPLAY_MORSE && gEeprom.RX_VFO == gEeprom.TX_VFO) {
+                        // In MORSE mode, ignore DTMF if RX is set to TX VFO (must listen on RX VFO only)
+                        return;
+                    }
                     if (gSetting_live_DTMF_decoder) {
                         size_t len = strlen(gDTMF_RX_live);
                         if (len >= sizeof(gDTMF_RX_live) - 1) { // make room
@@ -1391,13 +1417,24 @@ void APP_TimeSlice10ms(void)
 #endif
     }
 
+    if (gScreenToDisplay == DISPLAY_MORSE && txstatus == 3) {
+        // Refresh periodically so the wait countdown updates without blocking delays.
+        if ((gFlashLightBlinkCounter & 0x7u) == 0u)
+            gUpdateDisplay = true;
+    }
+
     if (gUpdateDisplay) {
         gUpdateDisplay = false;
         GUI_DisplayScreen();
     }
 
     if (gUpdateStatus)
-        UI_DisplayStatus();
+    {
+        if (gScreenToDisplay == DISPLAY_MORSE)
+            UI_DisplayMORSEStatus();
+        else
+            UI_DisplayStatus();
+    }
 
     // Skipping authentic device checks
 
@@ -1491,6 +1528,8 @@ void APP_TimeSlice10ms(void)
 
 
     SCANNER_TimeSlice10ms();
+
+    MORSE_RemoteTimeSlice10ms();
 
     if (gFrequencyInputAutoConfirmCountdown_10ms > 0) {
         if (--gFrequencyInputAutoConfirmCountdown_10ms == 0) {

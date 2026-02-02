@@ -20,11 +20,73 @@
 #include "functions.h"
 #include "settings.h"
 #include "driver/uart.h"
+#include "app/chFrScanner.h"
 
 int txstatus =0;
 bool txen = false;
 char cwid1_m[MORSE_CWID_PART_LEN + 1] = MORSE_CWID_DEFAULT;
 char cwid2_m[MORSE_CWID_PART_LEN + 1] = "";
+
+static bool gMorseRemoteActive = false;
+static uint16_t gMorseRemoteCountdown_10ms = 0;
+static bool gMorseDtmfOverride = false;
+static bool gMorsePrevDtmfDecode = false;
+static bool gMorseExitPrimed = false;
+static bool gMorseExitConsume = false;
+
+static void TransmitMorse(const char *text);
+static uint16_t MORSE_GetStopIntervalMs(void);
+static void MORSE_SetDtmfOverride(bool enable)
+{
+    if (enable && !gMorseDtmfOverride) {
+        gMorsePrevDtmfDecode = gRxVfo->DTMF_DECODING_ENABLE;
+        gRxVfo->DTMF_DECODING_ENABLE = true;
+        gMorseDtmfOverride = true;
+        gSetting_live_DTMF_decoder = true;  // Enable live DTMF display for debugging
+    } else if (!enable && gMorseDtmfOverride) {
+        gRxVfo->DTMF_DECODING_ENABLE = gMorsePrevDtmfDecode;
+        gMorseDtmfOverride = false;
+        gSetting_live_DTMF_decoder = false; // Disable live DTMF display when exiting
+    }
+}
+
+void MORSE_UpdateDtmfOverride(void)
+{
+    // Always keep DTMF decoding enabled in MORSE mode so we can receive remote activation commands
+    MORSE_SetDtmfOverride(true);
+}
+
+void MORSE_ClearDtmfOverride(void)
+{
+    MORSE_SetDtmfOverride(false);
+}
+
+void MORSE_ResetExitPrime(void)
+{
+    gMorseExitPrimed = false;
+    gMorseExitConsume = false;
+}
+
+static uint16_t MORSE_GetStopIntervalMs(void)
+{
+    uint16_t interval = morse_stop_interval_ms;
+    if (interval < MORSE_STOP_INTERVAL_MIN_MS)
+        interval = MORSE_STOP_INTERVAL_MIN_MS;
+    if (interval > MORSE_STOP_INTERVAL_MAX_MS)
+        interval = MORSE_STOP_INTERVAL_MAX_MS;
+    return interval;
+}
+
+uint16_t MORSE_GetWaitCountdown10ms(void)
+{
+    if (txstatus != 3)
+        return 0;
+    if (gCustomCountdown_10ms > 0)
+        return gCustomCountdown_10ms;
+    if (gMorseRemoteActive && gMorseRemoteCountdown_10ms > 0)
+        return gMorseRemoteCountdown_10ms;
+    return (MORSE_GetStopIntervalMs() + 9u) / 10u;
+}
 
 static size_t MORSE_Strnlen(const char *s, size_t max_len)
 {
@@ -60,7 +122,7 @@ const char *MORSE_GetCombinedCwid(void)
     return combined;
 }
 
-char* morseVersion = "1.1.0";
+char* morseVersion = "1.2.0";
 uint8_t morse_wpm = MORSE_WPM_DEFAULT;
 uint8_t morse_wpm_effective = MORSE_EFF_WPM_DEFAULT;
 uint16_t morse_stop_interval_ms = MORSE_STOP_INTERVAL_DEFAULT_MS;
@@ -138,9 +200,8 @@ static uint16_t MORSE_GetGapUnitMs(void)
 void morseDelay(uint16_t tms){
         uint16_t last_tenths = 0xFFFFu;
         const bool show_countdown =
-            (tms >= 1000u) &&
-            ((txstatus == 2 && tms == morse_beep_ms) ||
-             (txstatus == 3 && tms == morse_stop_interval_ms));
+            (txstatus == 3) ||
+            ((tms >= 1000u) && (txstatus == 2 && tms == morse_beep_ms));
 
         if (tms == 0) {
             gCustomCountdown_10ms = 0;
@@ -155,9 +216,14 @@ void morseDelay(uint16_t tms){
             UI_DisplayMORSE();
         }
         while (!gCustomTimeoutReached) {
+            if (txstatus == 3) {
+                APP_TimeSlice10ms();
+            }
             if (KEYBOARD_Poll() == KEY_EXIT) {
-                txstatus=0;
-                txen=false;
+                txstatus = 0;
+                txen = false;
+                gMorseExitPrimed = true;
+                gMorseExitConsume = true;
                 UI_DisplayMORSE();
                 return;
             }
@@ -198,6 +264,85 @@ static void MORSE_StopTx(void)
     gVOX_NoiseDetected = false;
 #endif
     RADIO_SetVfoState(VFO_STATE_NORMAL);
+
+    if (gScreenToDisplay == DISPLAY_MORSE) {
+        // Restore RX path after MORSE TX so audio/DTMF use the RX VFO.
+        RADIO_SetupRegisters(false);
+    }
+}
+
+void MORSE_RemoteActivate(void)
+{
+    gMorseRemoteActive = true;
+    if (gMorseRemoteCountdown_10ms == 0)
+        gMorseRemoteCountdown_10ms = 1;
+}
+
+void MORSE_RemoteDeactivate(void)
+{
+    gMorseRemoteActive = false;
+    gMorseRemoteCountdown_10ms = 0;
+    txstatus = 0;
+    txen = false;
+    if (gCurrentFunction == FUNCTION_TRANSMIT)
+        MORSE_StopTx();
+}
+
+bool MORSE_RemoteIsActive(void)
+{
+    return gMorseRemoteActive;
+}
+
+void MORSE_RemoteTimeSlice10ms(void)
+{
+    if (!gMorseRemoteActive)
+        return;
+
+    // If exit was pressed during remote transmission, stop and deactivate
+    if (gMorseExitPrimed) {
+        MORSE_RemoteDeactivate();
+        return;
+    }
+
+    if (gCurrentFunction == FUNCTION_TRANSMIT)
+        return;
+
+    if (gCurrentFunction != FUNCTION_FOREGROUND || g_SquelchLost)
+        return;
+
+    if (gScanStateDir != SCAN_OFF || gCssBackgroundScan)
+        return;
+
+#ifdef ENABLE_DTMF_CALLING
+    if (gSetting_KILLED)
+        return;
+#endif
+
+    if (gMorseRemoteCountdown_10ms > 0) {
+        gMorseRemoteCountdown_10ms--;
+        return;
+    }
+
+    RADIO_ApplyOffset(gTxVfo);
+    if (!MORSE_StartTx()) {
+        gMorseRemoteCountdown_10ms = 50;
+        return;
+    }
+
+    TransmitMorse(MORSE_GetCombinedCwid());
+    MORSE_StopTx();
+
+    if (!gMorseRemoteActive)
+        return;
+
+    {
+        uint32_t delay = MORSE_GetStopIntervalMs() / 10u;
+        if (delay == 0)
+            delay = 1u;
+        if (delay > 0xFFFFu)
+            delay = 0xFFFFu;
+        gMorseRemoteCountdown_10ms = (uint16_t)delay;
+    }
 }
 
 void PlayMorseTone(const char *morse) {
@@ -349,8 +494,20 @@ void TransmitMorse(const char *text) {
 
 static void MORSE_Key_MENU(bool bKeyPressed, bool bKeyHeld) {
     if (!bKeyHeld && bKeyPressed) {
+        // Ignore MENU while waiting or otherwise busy (prevents re-starting TX mid-cycle).
+        if (txstatus != 0 || txen || gCurrentFunction == FUNCTION_TRANSMIT || gMorseRemoteActive) {
+            return;
+        }
+        gMorseExitPrimed = false;
+        gMorseExitConsume = false;
         txen=true;
         while(txen){
+            // Check if exit was requested
+            if (gMorseExitPrimed) {
+                txen = false;
+                break;
+            }
+            
             if (!MORSE_StartTx()) {
                 txstatus = 0;
                 UI_DisplayMORSE();
@@ -359,20 +516,58 @@ static void MORSE_Key_MENU(bool bKeyPressed, bool bKeyHeld) {
             }
             TransmitMorse(MORSE_GetCombinedCwid());
             MORSE_StopTx();
-            morseDelay(morse_stop_interval_ms); 
+            
+            // Check if exit was requested during transmission
+            if (gMorseExitPrimed) {
+                txen = false;
+                break;
+            }
+            
+            morseDelay(MORSE_GetStopIntervalMs());
         }
     }
 }
 static void MORSE_Key_EXIT(bool bKeyPressed, bool bKeyHeld)
 {
-    if (!bKeyHeld && bKeyPressed) {
-        if (!txen) {
-            gRequestDisplayScreen = DISPLAY_MAIN;
-        }
+    if (!bKeyPressed) {
+        // Key release clears any pending consume from the TX abort press.
+        if (gMorseExitConsume)
+            gMorseExitConsume = false;
+        return;
     }
+
+    if (bKeyHeld)
+        return;
+
+    if (gMorseExitConsume) {
+        gMorseExitConsume = false;
+        return;
+    }
+
+    // If currently transmitting or waiting, stop TX and stay in MORSE.
+    if (gCurrentFunction == FUNCTION_TRANSMIT || txstatus != 0 || txen || gMorseRemoteActive) {
+        if (gCurrentFunction == FUNCTION_TRANSMIT)
+            MORSE_StopTx();
+        if (gMorseRemoteActive)
+            MORSE_RemoteDeactivate();
+        txstatus = 0;
+        txen = false;
+        gMorseExitPrimed = true;
+        UI_DisplayMORSE();
+        return;
+    }
+
+    // Idle: exit immediately on a single press.
+    gMorseExitPrimed = false;
+    MORSE_ClearDtmfOverride();
+    UI_MORSE_ClearRxSetup();
+    gRequestDisplayScreen = DISPLAY_MAIN;
 }
 static void MORSE_Key_UP_DOWN(bool bKeyPressed, bool pKeyHeld, int8_t Direction)
 {
+    const bool waiting = (txstatus == 3);
+    if (!waiting && (txstatus != 0 || txen))
+        return;
     if (!pKeyHeld && bKeyPressed && Direction==1) {
         gTxVfo->OUTPUT_POWER++;
     } else if(!pKeyHeld && bKeyPressed && Direction==-1){
@@ -399,6 +594,18 @@ void MORSE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         case KEY_EXIT:
             MORSE_Key_EXIT(bKeyPressed, bKeyHeld);
             break;
+        case KEY_1:
+            if (!bKeyHeld && bKeyPressed) {
+                UI_MORSE_PrevPage();
+                UI_DisplayMORSE();
+            }
+            break;
+        case KEY_4:
+            if (!bKeyHeld && bKeyPressed) {
+                UI_MORSE_NextPage();
+                UI_DisplayMORSE();
+            }
+            break;
         case KEY_UP:
             MORSE_Key_UP_DOWN(bKeyPressed, bKeyHeld,  1);
             break;
@@ -410,5 +617,3 @@ void MORSE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             break;
     }
 }
-
-

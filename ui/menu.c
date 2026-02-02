@@ -49,6 +49,10 @@ const t_menu_item MenuList[] =
     {"CWTone",      MENU_CW_TONE       },
     {"CWBeep",      MENU_CW_BEEP       },
     {"CWStop",       MENU_CW_INT        },
+#ifdef ENABLE_DTMF_CALLING
+    {"CWon",        MENU_CWON          },
+    {"CWoff",       MENU_CWOFF         },
+#endif
     {"RxDCS",       MENU_R_DCS         }, // was "R_DCS"
     {"RxCTCS",      MENU_R_CTCS        }, // was "R_CTCS"
     {"TxDCS",       MENU_T_DCS         }, // was "T_DCS"
@@ -147,7 +151,9 @@ const t_menu_item MenuList[] =
     {"SetTOT",      MENU_SET_TOT       },
     {"SetEOT",      MENU_SET_EOT       },
     {"SetCtr",      MENU_SET_CTR       },
+#ifdef ENABLE_FEAT_F4HWN_INV
     {"SetInv",      MENU_SET_INV       },
+#endif
     {"SetLck",      MENU_SET_LCK       },
     {"SetMet",      MENU_SET_MET       },
     {"SetGUI",      MENU_SET_GUI       },
@@ -961,6 +967,31 @@ void UI_DisplayMenu(void)
             sprintf(String, "%.8s\n%.8s", gEeprom.DTMF_UP_CODE, gEeprom.DTMF_UP_CODE + 8);
             break;
 
+#ifdef ENABLE_DTMF_CALLING
+        case MENU_CWON:
+        case MENU_CWOFF:
+        {
+            if (!gIsInSubMenu)
+                edit_index = -1;
+            if (edit_index < 0)
+            {
+                const char *code = (UI_MENU_GetCurrentMenuId() == MENU_CWON)
+                    ? gEeprom.DTMF_CW_ON_CODE
+                    : gEeprom.DTMF_CW_OFF_CODE;
+                const char *pPrintStr = code[0] ? code : "--";
+                UI_PrintString(pPrintStr, menu_item_x1 - 1, menu_item_x2, 2, 8);
+            }
+            else
+            {
+                UI_PrintString(edit, menu_item_x1 - 1, menu_item_x2, 2, 8);
+                if (edit_index < (int)DTMF_CW_CODE_LEN)
+                    UI_PrintString("^", menu_item_x1 + 7 + (8 * edit_index), 0, 4, 8);
+            }
+            already_printed = true;
+            break;
+        }
+#endif
+
         case MENU_DWCODE:
             sprintf(String, "%.8s\n%.8s", gEeprom.DTMF_DOWN_CODE, gEeprom.DTMF_DOWN_CODE + 8);
             break;
@@ -1159,14 +1190,12 @@ void UI_DisplayMenu(void)
             #endif
             break;
 
+#ifdef ENABLE_FEAT_F4HWN_INV
         case MENU_SET_INV:
-            #ifdef ENABLE_FEAT_F4HWN_INV
-                strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
-                ST7565_ContrastAndInv();
-            #else
-                strcpy(String, gSubMenu_NA);
-            #endif
+            strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
+            ST7565_ContrastAndInv();
             break;
+#endif
 
         case MENU_TX_LOCK:
             if(TX_freq_check(gEeprom.VfoInfo[gEeprom.TX_VFO].pRX->Frequency) == 0)

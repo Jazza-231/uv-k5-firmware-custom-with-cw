@@ -407,6 +407,24 @@ void SETTINGS_InitEEPROM(void)
         strcpy(gEeprom.DTMF_DOWN_CODE, "54321");
     }
 
+    // 0F20..0F27
+    EEPROM_ReadBuffer(0x0F20, Data, sizeof(gEeprom.DTMF_CW_ON_CODE));
+    if (DTMF_ValidateCodes((char *)Data, sizeof(gEeprom.DTMF_CW_ON_CODE))) {
+        memcpy(gEeprom.DTMF_CW_ON_CODE, Data, sizeof(gEeprom.DTMF_CW_ON_CODE));
+    } else {
+        strcpy(gEeprom.DTMF_CW_ON_CODE, "123");
+    }
+    gEeprom.DTMF_CW_ON_CODE[DTMF_CW_CODE_LEN] = 0;
+
+    // 0F28..0F2F
+    EEPROM_ReadBuffer(0x0F28, Data, sizeof(gEeprom.DTMF_CW_OFF_CODE));
+    if (DTMF_ValidateCodes((char *)Data, sizeof(gEeprom.DTMF_CW_OFF_CODE))) {
+        memcpy(gEeprom.DTMF_CW_OFF_CODE, Data, sizeof(gEeprom.DTMF_CW_OFF_CODE));
+    } else {
+        strcpy(gEeprom.DTMF_CW_OFF_CODE, "456");
+    }
+    gEeprom.DTMF_CW_OFF_CODE[DTMF_CW_CODE_LEN] = 0;
+
     // 0F18..0F1F
     EEPROM_ReadBuffer(0x0F18, Data, 8);
     gEeprom.SCAN_LIST_DEFAULT = (Data[0] < 6) ? Data[0] : 0;  // we now have 'all' channel scan option
@@ -912,6 +930,20 @@ void SETTINGS_SaveSettings(void)
     State[6] = gEeprom.SCANLIST_PRIORITY_CH1[2];
     State[7] = gEeprom.SCANLIST_PRIORITY_CH2[2];
     EEPROM_WriteBuffer(0x0F18, State);
+
+    {
+        uint8_t codes[8];
+
+        memset(codes, 0xFF, sizeof(codes));
+        memcpy(codes, gEeprom.DTMF_CW_ON_CODE, DTMF_CW_CODE_LEN);
+        codes[DTMF_CW_CODE_LEN] = 0;
+        EEPROM_WriteBuffer(0x0F20, codes);
+
+        memset(codes, 0xFF, sizeof(codes));
+        memcpy(codes, gEeprom.DTMF_CW_OFF_CODE, DTMF_CW_CODE_LEN);
+        codes[DTMF_CW_CODE_LEN] = 0;
+        EEPROM_WriteBuffer(0x0F28, codes);
+    }
 
     memset(State, 0xFF, sizeof(State));
     State[0]  = gSetting_F_LOCK;

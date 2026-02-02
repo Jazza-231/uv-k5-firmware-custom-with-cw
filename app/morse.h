@@ -34,6 +34,14 @@ void MorseTask(void);
 const char* MorseCode(char c);
 void MORSE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
 void GUI_ShowMorseScreen(void);
+void MORSE_RemoteActivate(void);
+void MORSE_RemoteDeactivate(void);
+bool MORSE_RemoteIsActive(void);
+void MORSE_RemoteTimeSlice10ms(void);
+void MORSE_UpdateDtmfOverride(void);
+void MORSE_ClearDtmfOverride(void);
+void MORSE_ResetExitPrime(void);
+uint16_t MORSE_GetWaitCountdown10ms(void);
 
 // Global Variables
 extern int txstatus;

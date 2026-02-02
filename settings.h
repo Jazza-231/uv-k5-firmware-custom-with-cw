@@ -28,6 +28,8 @@
 #define EEPROM_ADDR_MORSE 0x1FD0u
 #define EEPROM_MORSE_SIZE 32u
 
+#define DTMF_CW_CODE_LEN 8u
+
 enum POWER_OnDisplayMode_t {
 #ifdef ENABLE_FEAT_F4HWN
     POWER_ON_DISPLAY_MODE_ALL,
@@ -257,6 +259,9 @@ typedef struct {
     uint8_t               field58_0x6d;
 
     char                  DTMF_DOWN_CODE[16];
+
+    char                  DTMF_CW_ON_CODE[8];
+    char                  DTMF_CW_OFF_CODE[8];
 
     uint8_t               field60_0x7e;
     uint8_t               field61_0x7f;

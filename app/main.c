@@ -40,6 +40,7 @@
 #include "radio.h"
 #include "settings.h"
 #include "ui/inputbox.h"
+#include "ui/morse.h"
 #include "ui/ui.h"
 #include <stdlib.h>
 #include "driver/system.h"
@@ -185,6 +186,7 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             break;
 
         case KEY_5:
+            UI_MORSE_Init();
             gRequestDisplayScreen = DISPLAY_MORSE;
             break;
 

@@ -30,8 +30,10 @@
 #include "driver/system.h"
 #include "dtmf.h"
 #include "external/printf/printf.h"
+#include "functions.h"
 #include "misc.h"
 #include "settings.h"
+#include "app/morse.h"
 #include "ui/ui.h"
 
 char              gDTMF_String[15];
@@ -184,6 +186,22 @@ char DTMF_GetCharacter(const unsigned int code)
         case KEY_F:    return '#';
         default:       return 0xff;
     }
+}
+
+bool DTMF_CodeEquals(const char *a, const char *b, const unsigned int max_len)
+{
+    for (unsigned int i = 0; i < max_len; i++) {
+        const char ca = a[i];
+        const char cb = b[i];
+        if (ca == 0 || ca == 0xFF || ca == ' ') {
+            return (cb == 0 || cb == 0xFF || cb == ' ');
+        }
+        if (cb == 0 || cb == 0xFF || cb == ' ')
+            return false;
+        if (ca != cb)
+            return false;
+    }
+    return true;
 }
 #ifdef ENABLE_DTMF_CALLING
 static bool CompareMessage(const char *pMsg, const char *pTemplate, const unsigned int size, const bool bCheckGroup)
@@ -363,6 +381,28 @@ void DTMF_HandleRequest(void)
     if (gSetting_KILLED || gDTMF_CallState != DTMF_CALL_STATE_NONE)
     {   // we've been killed or expecting a reply
         return;
+    }
+
+    if (gDTMF_RX_index >= 1)
+    {   // look for remote CW beacon control codes
+        // Only respond to CW commands if not currently transmitting on TX frequency
+        if (gCurrentFunction != FUNCTION_TRANSMIT)
+        {
+            if (DTMF_CodeEquals(gDTMF_RX, gEeprom.DTMF_CW_ON_CODE, sizeof(gEeprom.DTMF_CW_ON_CODE)))
+            {
+                MORSE_RemoteActivate();
+                DTMF_clear_RX();
+                gUpdateDisplay = true;
+                return;
+            }
+            if (DTMF_CodeEquals(gDTMF_RX, gEeprom.DTMF_CW_OFF_CODE, sizeof(gEeprom.DTMF_CW_OFF_CODE)))
+            {
+                MORSE_RemoteDeactivate();
+                DTMF_clear_RX();
+                gUpdateDisplay = true;
+                return;
+            }
+        }
     }
 
     if (gDTMF_RX_index >= 7)

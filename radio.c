@@ -345,13 +345,13 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
             pVfo->TX_LOCK           = !!((d4 >> 6) & 1u);
         }
 
-        if (data[5] == 0xFF)
-        {
+    if (data[5] == 0xFF)
+    {
 #ifdef ENABLE_DTMF_CALLING
-            pVfo->DTMF_DECODING_ENABLE = false;
+        pVfo->DTMF_DECODING_ENABLE = false;
 #endif
-            pVfo->DTMF_PTT_ID_TX_MODE  = PTT_ID_OFF;
-        }
+        pVfo->DTMF_PTT_ID_TX_MODE  = PTT_ID_OFF;
+    }
         else
         {
 #ifdef ENABLE_DTMF_CALLING

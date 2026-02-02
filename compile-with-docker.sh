@@ -13,9 +13,9 @@ fi
 custom() {
     echo "Custom compilation..."
     docker run --rm -v "${PWD}/compiled-firmware/:/app/compiled-firmware" $IMAGE_NAME /bin/bash -c "rm ./compiled-firmware/*; cd /app && make -s \
-        EDITION_STRING=Custom \
-        TARGET=k5cw-beacon.custom \
-        && cp k5cw-beacon.custom* compiled-firmware/"
+        EDITION_STRING=Beacon \
+        TARGET=k5cw \
+        && cp k5cw* compiled-firmware/"
 }
 
 standard() {
@@ -74,7 +74,7 @@ basic() {
         ENABLE_NOAA=0 \
         ENABLE_FEAT_F4HWN_RESUME_STATE=0 \
         ENABLE_FEAT_F4HWN_CHARGING_C=0 \
-        ENABLE_FEAT_F4HWN_INV=1 \
+        ENABLE_FEAT_F4HWN_INV=0 \
         ENABLE_FEAT_F4HWN_CTR=0 \
         ENABLE_FEAT_F4HWN_NARROWER=0 \
         ENABLE_FEAT_F4HWN_RESCUE_OPS=0 \

@@ -366,6 +366,10 @@ u8 sl2PriorCh2;
 u8 sl3PriorCh1;
 u8 sl3PriorCh2;
 
+#seekto 0xf20;
+char cw_on_code[8];
+char cw_off_code[8];
+
 #seekto 0xf40;
 u8 int_flock;
 u8 int_350tx_unsused;
@@ -1989,6 +1993,14 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
                 k = str(element.value).rstrip("\x20\xff\x00") + "\x00"*16
                 _mem.dtmf.down_code = k[0:16]
 
+            elif elname == "dtmf_cw_on_code":
+                k = str(element.value).rstrip("\x20\xff\x00") + "\x00"*8
+                _mem.cw_on_code = k[0:8]
+
+            elif elname == "dtmf_cw_off_code":
+                k = str(element.value).rstrip("\x20\xff\x00") + "\x00"*8
+                _mem.cw_off_code = k[0:8]
+
             elif elname == "dtmf_kill_code":
                 k = str(element.value).strip("\x20\xff\x00") + "\x00"*5
                 _mem.dtmf.kill_code = k[0:5]
@@ -2292,6 +2304,36 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         cw_stop_setting = RadioSetting("morse_stop_ms", "CW Wait Time (ms)", val)
         cw_stop_setting.set_doc('CW Stop: Delay after a CW transmission in milliseconds')
         cw.append(cw_stop_setting)
+
+        tmpval = str(_mem.cw_on_code).upper().strip("\x00\xff\x20")
+        for i in tmpval:
+            if i in DTMF_CHARS_UPDOWN:
+                continue
+            else:
+                tmpval = "123"
+                break
+        val = RadioSettingValueString(1, 8, tmpval)
+        val.set_charset(DTMF_CHARS_UPDOWN)
+        cw_on_code_setting = \
+            RadioSetting("dtmf_cw_on_code",
+                         "CW Beacon On Code (1-8 chars 0-9 ABCD*#)", val)
+        cw_on_code_setting.set_doc('CW On Code: DTMF code that starts the CW beacon transmitter')
+        cw.append(cw_on_code_setting)
+
+        tmpval = str(_mem.cw_off_code).upper().strip("\x00\xff\x20")
+        for i in tmpval:
+            if i in DTMF_CHARS_UPDOWN:
+                continue
+            else:
+                tmpval = "456"
+                break
+        val = RadioSettingValueString(1, 8, tmpval)
+        val.set_charset(DTMF_CHARS_UPDOWN)
+        cw_off_code_setting = \
+            RadioSetting("dtmf_cw_off_code",
+                         "CW Beacon Off Code (1-8 chars 0-9 ABCD*#)", val)
+        cw_off_code_setting.set_doc('CW Off Code: DTMF code that stops the CW beacon transmitter')
+        cw.append(cw_off_code_setting)
 
         # ----------------- DTMF settings
 
