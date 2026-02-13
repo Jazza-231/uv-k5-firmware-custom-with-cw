@@ -135,10 +135,10 @@ MORSE_EFF_WPM_MAX = MORSE_WPM_MAX
 MORSE_STOP_INTERVAL_DEFAULT_MS = 45000
 MORSE_STOP_INTERVAL_MIN_MS = 1000
 MORSE_STOP_INTERVAL_MAX_MS = 60000
-MORSE_BEEP_INTERVAL_DEFAULT_MS = 7500
-MORSE_BEEP_INTERVAL_MIN_MS = 0
-MORSE_BEEP_INTERVAL_MAX_MS = 30000
-MORSE_BEEP_INTERVAL_STEP_MS = 100
+MORSE_BEEP_COUNT_DEFAULT = 50
+MORSE_BEEP_COUNT_MIN = 0
+MORSE_BEEP_COUNT_MAX = 200
+MORSE_BEEP_COUNT_STEP = 1
 MORSE_TONE_HZ_DEFAULT = 600
 MORSE_TONE_HZ_MIN = 300
 MORSE_TONE_HZ_MAX = 1200
@@ -493,7 +493,7 @@ struct {
     u8 morse_wpm;
     ul16 morse_stop_ms;
     u8 morse_eff_wpm;
-    ul16 morse_beep_ms;
+    ul16 morse_beep_num;
     ul16 morse_tone_hz;
     u8 __UNUSED_MORSE[4];
 } morse;
@@ -1111,7 +1111,7 @@ def _build_morse_block(radio):
         wpm = min_max_def(_get_int(mem.morse.morse_wpm, MORSE_WPM_DEFAULT), MORSE_WPM_MIN, MORSE_WPM_MAX, MORSE_WPM_DEFAULT)
         eff_wpm = wpm
         stop_ms = min_max_def(_get_int(mem.morse.morse_stop_ms, MORSE_STOP_INTERVAL_DEFAULT_MS), MORSE_STOP_INTERVAL_MIN_MS, MORSE_STOP_INTERVAL_MAX_MS, MORSE_STOP_INTERVAL_DEFAULT_MS)
-        beep_ms = min_max_def(_get_int(mem.morse.morse_beep_ms, MORSE_BEEP_INTERVAL_DEFAULT_MS), MORSE_BEEP_INTERVAL_MIN_MS, MORSE_BEEP_INTERVAL_MAX_MS, MORSE_BEEP_INTERVAL_DEFAULT_MS)
+        beep_num = min_max_def(_get_int(mem.morse.morse_beep_num, MORSE_BEEP_COUNT_DEFAULT), MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, MORSE_BEEP_COUNT_DEFAULT)
         tone_hz = min_max_def(_get_int(mem.morse.morse_tone_hz, MORSE_TONE_HZ_DEFAULT), MORSE_TONE_HZ_MIN, MORSE_TONE_HZ_MAX, MORSE_TONE_HZ_DEFAULT)
 
         cwid1 = _get_cwid(mem.morse.cwid1) or (radio.get_mmap()[MORSE_START:MORSE_START+10] if not isinstance(radio.get_mmap(), slice) else b"\xFF"*10)
@@ -1120,7 +1120,7 @@ def _build_morse_block(radio):
         data = bytearray(MORSE_SIZE)
         data[0:10] = (bytes(cwid1) + b"\xFF"*10)[:10]
         data[10:20] = (bytes(cwid2) + b"\xFF"*10)[:10]
-        data[20:28] = struct.pack("<BHBHH", int(wpm), int(stop_ms), int(eff_wpm), int(beep_ms), int(tone_hz))
+        data[20:28] = struct.pack("<BHBHH", int(wpm), int(stop_ms), int(eff_wpm), int(beep_num), int(tone_hz))
         
         if len(data) < MORSE_SIZE: data += b"\xFF" * (MORSE_SIZE - len(data))
 
@@ -1765,8 +1765,8 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             elif elname == "morse_stop_ms":
                 _mem.morse.morse_stop_ms = int(element.value)
 
-            elif elname == "morse_beep_ms":
-                _mem.morse.morse_beep_ms = int(element.value)
+            elif elname == "morse_beep_num":
+                _mem.morse.morse_beep_num = int(element.value)
 
             elif elname == "morse_tone_hz":
                 _mem.morse.morse_tone_hz = int(element.value)
@@ -2293,10 +2293,10 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         cw_tone_setting.set_doc('CW Tone: Sidetone frequency in Hz')
         cw.append(cw_tone_setting)
 
-        beep_ms = min_max_def(_get_int(_mem.morse.morse_beep_ms, MORSE_BEEP_INTERVAL_DEFAULT_MS), MORSE_BEEP_INTERVAL_MIN_MS, MORSE_BEEP_INTERVAL_MAX_MS, MORSE_BEEP_INTERVAL_DEFAULT_MS)
-        val = RadioSettingValueInteger(MORSE_BEEP_INTERVAL_MIN_MS, MORSE_BEEP_INTERVAL_MAX_MS, beep_ms, MORSE_BEEP_INTERVAL_STEP_MS)
-        cw_beep_setting = RadioSetting("morse_beep_ms", "CW Beep Time (ms)", val)
-        cw_beep_setting.set_doc('CW Beep: Interval in milliseconds between CW transmissions')
+        beep_num = min_max_def(_get_int(_mem.morse.morse_beep_num, MORSE_BEEP_COUNT_DEFAULT), MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, MORSE_BEEP_COUNT_DEFAULT)
+        val = RadioSettingValueInteger(MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, beep_num, MORSE_BEEP_COUNT_STEP)
+        cw_beep_setting = RadioSetting("morse_beep_num", "CW Beep Count", val)
+        cw_beep_setting.set_doc('CW Beep: Number of 1.0s tone beeps (0 disables pre-CW beeps)')
         cw.append(cw_beep_setting)
 
         stop_ms = min_max_def(_get_int(_mem.morse.morse_stop_ms, MORSE_STOP_INTERVAL_DEFAULT_MS), MORSE_STOP_INTERVAL_MIN_MS, MORSE_STOP_INTERVAL_MAX_MS, MORSE_STOP_INTERVAL_DEFAULT_MS)

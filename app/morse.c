@@ -126,7 +126,7 @@ char* morseVersion = "1.2.0";
 uint8_t morse_wpm = MORSE_WPM_DEFAULT;
 uint8_t morse_wpm_effective = MORSE_EFF_WPM_DEFAULT;
 uint16_t morse_stop_interval_ms = MORSE_STOP_INTERVAL_DEFAULT_MS;
-uint16_t morse_beep_ms = MORSE_BEEP_INTERVAL_DEFAULT_MS;
+uint16_t morse_beep_num = MORSE_BEEP_COUNT_DEFAULT;
 uint16_t morse_tone_hz = MORSE_TONE_HZ_DEFAULT;
 
 #define MORSE_PARIS_WORD_UNITS    50u
@@ -201,7 +201,7 @@ void morseDelay(uint16_t tms){
         uint16_t last_tenths = 0xFFFFu;
         const bool show_countdown =
             (txstatus == 3) ||
-            ((tms >= 1000u) && (txstatus == 2 && tms == morse_beep_ms));
+            ((txstatus == 2) && (tms >= 1000u));
 
         if (tms == 0) {
             gCustomCountdown_10ms = 0;
@@ -431,21 +431,31 @@ void TransmitMorse(const char *text) {
         const uint16_t letter_gap_ms_u16 = (uint16_t)(gap_unit_ms * 3u);
         const uint16_t word_gap_ms_u16 = (uint16_t)(gap_unit_ms * 7u);
         
-        const uint16_t beep_ms = morse_beep_ms;
+        const uint16_t beep_count = morse_beep_num;
 
-        if (beep_ms > 0) {
-            BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
-            BK4819_TransmitTone(false, morse_tone_hz);
-
-            txstatus=2;
+        if (beep_count > 0u) {
+            txstatus = 2;
             UI_DisplayMORSE();
-            morseDelay(beep_ms);
-            BK4819_EnterTxMute();
-            BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
-            if (txstatus == 0) {
-                UI_DisplayMORSE();
-                return;
+
+            for (uint16_t i = 0; i < beep_count; i++) {
+                BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+                BK4819_TransmitTone(false, morse_tone_hz);
+                morseDelay(1000u);
+                BK4819_EnterTxMute();
+                BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
+                if (txstatus == 0) {
+                    UI_DisplayMORSE();
+                    return;
+                }
+                if ((i + 1u) < beep_count) {
+                    morseDelay(500u);
+                    if (txstatus == 0) {
+                        UI_DisplayMORSE();
+                        return;
+                    }
+                }
             }
+
             morseDelay(letter_gap_ms_u16);
             if (txstatus == 0) {
                 UI_DisplayMORSE();
@@ -457,7 +467,7 @@ void TransmitMorse(const char *text) {
             UI_DisplayMORSE();
             MORSE_PrepareToneNoBeep(morse_tone_hz);
         }
-        if (beep_ms > 0) {
+        if (beep_count > 0u) {
             txstatus=1;
             UI_DisplayMORSE();
         }

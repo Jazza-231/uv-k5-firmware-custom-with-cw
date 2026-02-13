@@ -47,7 +47,7 @@ const t_menu_item MenuList[] =
     {"CWID2",       MENU_CWID2         },
     {"CW WPM",      MENU_CW_WPM        },
     {"CWTone",      MENU_CW_TONE       },
-    {"CWBeep",      MENU_CW_BEEP       },
+    {"CWBNum",      MENU_CW_BEEP       },
     {"CWStop",       MENU_CW_INT        },
 #ifdef ENABLE_DTMF_CALLING
     {"CWon",        MENU_CWON          },
@@ -1062,14 +1062,11 @@ void UI_DisplayMenu(void)
             break;
 
         case MENU_CW_BEEP:
-        {
-            const uint16_t half_seconds = (uint16_t)gSubMenuSelection;
-            if ((half_seconds % 2u) == 0u)
-                sprintf(String, "%us", (unsigned)(half_seconds / 2u));
+            if (gSubMenuSelection == 0)
+                strcpy(String, "OFF");
             else
-                sprintf(String, "%u.5s", (unsigned)(half_seconds / 2u));
+                sprintf(String, "%u", (unsigned)gSubMenuSelection);
             break;
-        }
 
         case MENU_CW_INT:
         {
