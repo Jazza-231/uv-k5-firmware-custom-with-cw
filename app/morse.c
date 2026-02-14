@@ -441,7 +441,7 @@ void TransmitMorse(const char *text) {
             for (uint16_t i = 0; i < beep_count; i++) {
                 BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
                 BK4819_TransmitTone(false, morse_tone_hz);
-                morseDelay(dot_ms);
+                morseDelay(dot_ms * 3u);
                 BK4819_EnterTxMute();
                 BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
                 if (txstatus == 0) {
@@ -449,7 +449,7 @@ void TransmitMorse(const char *text) {
                     return;
                 }
                 if ((i + 1u) < beep_count) {
-                    morseDelay(dot_ms * 2u);
+                    morseDelay(dot_ms * 5u);
                     if (txstatus == 0) {
                         UI_DisplayMORSE();
                         return;
