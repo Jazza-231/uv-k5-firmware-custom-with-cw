@@ -21,6 +21,10 @@
 #define MORSE_BEEP_COUNT_DEFAULT 50u
 #define MORSE_BEEP_COUNT_MIN 0u
 #define MORSE_BEEP_COUNT_MAX 200u
+#define MORSE_BEEP_LEN_DEFAULT_MS 240u
+#define MORSE_BEEP_LEN_MIN_MS 50u
+#define MORSE_BEEP_LEN_MAX_MS 2000u
+#define MORSE_BEEP_LEN_STEP_MS 10u
 #define MORSE_TONE_HZ_DEFAULT 600u
 #define MORSE_TONE_HZ_MIN 300u
 #define MORSE_TONE_HZ_MAX 1200u
@@ -52,5 +56,6 @@ extern uint8_t morse_wpm;
 extern uint8_t morse_wpm_effective;
 extern uint16_t morse_stop_interval_ms;
 extern uint16_t morse_beep_num;
+extern uint16_t morse_beep_length_ms;
 extern uint16_t morse_tone_hz;
 #endif // MORSE_CODE_H1

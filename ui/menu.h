@@ -106,6 +106,7 @@ enum
     MENU_CW_WPM,
     MENU_CW_TONE,
     MENU_CW_BEEP,
+    MENU_CW_BEEP_MS,
     MENU_CW_INT,
     MENU_ROGER,
     MENU_VOL,

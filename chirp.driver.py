@@ -139,6 +139,10 @@ MORSE_BEEP_COUNT_DEFAULT = 50
 MORSE_BEEP_COUNT_MIN = 0
 MORSE_BEEP_COUNT_MAX = 200
 MORSE_BEEP_COUNT_STEP = 1
+MORSE_BEEP_MS_DEFAULT = 240
+MORSE_BEEP_MS_MIN = 50
+MORSE_BEEP_MS_MAX = 2000
+MORSE_BEEP_MS_STEP = 10
 MORSE_TONE_HZ_DEFAULT = 600
 MORSE_TONE_HZ_MIN = 300
 MORSE_TONE_HZ_MAX = 1200
@@ -495,7 +499,8 @@ struct {
     u8 morse_eff_wpm;
     ul16 morse_beep_num;
     ul16 morse_tone_hz;
-    u8 __UNUSED_MORSE[4];
+    ul16 morse_beep_ms;
+    u8 __UNUSED_MORSE[2];
 } morse;
 
 
@@ -1113,6 +1118,7 @@ def _build_morse_block(radio):
         stop_ms = min_max_def(_get_int(mem.morse.morse_stop_ms, MORSE_STOP_INTERVAL_DEFAULT_MS), MORSE_STOP_INTERVAL_MIN_MS, MORSE_STOP_INTERVAL_MAX_MS, MORSE_STOP_INTERVAL_DEFAULT_MS)
         beep_num = min_max_def(_get_int(mem.morse.morse_beep_num, MORSE_BEEP_COUNT_DEFAULT), MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, MORSE_BEEP_COUNT_DEFAULT)
         tone_hz = min_max_def(_get_int(mem.morse.morse_tone_hz, MORSE_TONE_HZ_DEFAULT), MORSE_TONE_HZ_MIN, MORSE_TONE_HZ_MAX, MORSE_TONE_HZ_DEFAULT)
+        beep_ms = min_max_def(_get_int(mem.morse.morse_beep_ms, MORSE_BEEP_MS_DEFAULT), MORSE_BEEP_MS_MIN, MORSE_BEEP_MS_MAX, MORSE_BEEP_MS_DEFAULT)
 
         cwid1 = _get_cwid(mem.morse.cwid1) or (radio.get_mmap()[MORSE_START:MORSE_START+10] if not isinstance(radio.get_mmap(), slice) else b"\xFF"*10)
         cwid2 = _get_cwid(mem.morse.cwid2) or (radio.get_mmap()[MORSE_START+10:MORSE_START+20] if not isinstance(radio.get_mmap(), slice) else b"\xFF"*10)
@@ -1120,7 +1126,7 @@ def _build_morse_block(radio):
         data = bytearray(MORSE_SIZE)
         data[0:10] = (bytes(cwid1) + b"\xFF"*10)[:10]
         data[10:20] = (bytes(cwid2) + b"\xFF"*10)[:10]
-        data[20:28] = struct.pack("<BHBHH", int(wpm), int(stop_ms), int(eff_wpm), int(beep_num), int(tone_hz))
+        data[20:30] = struct.pack("<BHBHHH", int(wpm), int(stop_ms), int(eff_wpm), int(beep_num), int(tone_hz), int(beep_ms))
         
         if len(data) < MORSE_SIZE: data += b"\xFF" * (MORSE_SIZE - len(data))
 
@@ -1768,6 +1774,9 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             elif elname == "morse_beep_num":
                 _mem.morse.morse_beep_num = int(element.value)
 
+            elif elname == "morse_beep_ms":
+                _mem.morse.morse_beep_ms = int(element.value)
+
             elif elname == "morse_tone_hz":
                 _mem.morse.morse_tone_hz = int(element.value)
 
@@ -2296,8 +2305,14 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         beep_num = min_max_def(_get_int(_mem.morse.morse_beep_num, MORSE_BEEP_COUNT_DEFAULT), MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, MORSE_BEEP_COUNT_DEFAULT)
         val = RadioSettingValueInteger(MORSE_BEEP_COUNT_MIN, MORSE_BEEP_COUNT_MAX, beep_num, MORSE_BEEP_COUNT_STEP)
         cw_beep_setting = RadioSetting("morse_beep_num", "CW Beep Count", val)
-        cw_beep_setting.set_doc('CW Beep: Number of 1.0s tone beeps (0 disables pre-CW beeps)')
+        cw_beep_setting.set_doc('CW Beep Count: Number of pre-CW beeps (0 disables pre-CW beeps)')
         cw.append(cw_beep_setting)
+
+        beep_ms = min_max_def(_get_int(_mem.morse.morse_beep_ms, MORSE_BEEP_MS_DEFAULT), MORSE_BEEP_MS_MIN, MORSE_BEEP_MS_MAX, MORSE_BEEP_MS_DEFAULT)
+        val = RadioSettingValueInteger(MORSE_BEEP_MS_MIN, MORSE_BEEP_MS_MAX, beep_ms, MORSE_BEEP_MS_STEP)
+        cw_beep_ms_setting = RadioSetting("morse_beep_ms", "CW Beep Length (ms)", val)
+        cw_beep_ms_setting.set_doc('CW Beep Length: Duration of each pre-CW beep in milliseconds')
+        cw.append(cw_beep_ms_setting)
 
         stop_ms = min_max_def(_get_int(_mem.morse.morse_stop_ms, MORSE_STOP_INTERVAL_DEFAULT_MS), MORSE_STOP_INTERVAL_MIN_MS, MORSE_STOP_INTERVAL_MAX_MS, MORSE_STOP_INTERVAL_DEFAULT_MS)
         val = RadioSettingValueInteger(MORSE_STOP_INTERVAL_MIN_MS, MORSE_STOP_INTERVAL_MAX_MS, stop_ms, 1000)
